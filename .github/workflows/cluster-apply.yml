@@ -1,0 +1,92 @@
+name: Cluster Apply
+
+on:
+  push:
+    branches: [main]
+    paths: ['clusters/**/*.yaml']
+  pull_request:
+    branches: [main]
+    paths: ['clusters/**/*.yaml']
+
+jobs:
+  detect:
+    runs-on: [self-hosted, proxmox]
+    outputs:
+      clusters: ${{ steps.changed.outputs.clusters }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed cluster files
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'clusters/*.yaml' \
+            | sed 's|clusters/||;s|\.yaml||' \
+            | jq -R . | jq -sc .)
+          echo "clusters=$CHANGED" >> $GITHUB_OUTPUT
+          echo "Detected clusters: $CHANGED"
+
+  terraform:
+    needs: detect
+    runs-on: [self-hosted, proxmox]
+    if: needs.detect.outputs.clusters != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        cluster: ${{ fromJson(needs.detect.outputs.clusters) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate tfvars from cluster manifest
+        run: |
+          python3 scripts/yaml_to_tfvars.py \
+            clusters/${{ matrix.cluster }}.yaml \
+            terraform/generated.auto.tfvars
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="key=clusters/${{ matrix.cluster }}/terraform.tfstate" \
+            -backend-config="endpoint=${{ secrets.MINIO_ENDPOINT }}" \
+            -backend-config="access_key=${{ secrets.MINIO_ACCESS_KEY }}" \
+            -backend-config="secret_key=${{ secrets.MINIO_SECRET_KEY }}" \
+            -backend-config="region=us-east-1" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="force_path_style=true" \
+            -reconfigure
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PM_API_URL }}
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PM_API_URL }}
+          TF_VAR_pm_user: ${{ secrets.PM_USER }}
+          TF_VAR_pm_password: ${{ secrets.PM_PASSWORD }}
+          TF_VAR_ci_password: ${{ secrets.CI_PASSWORD }}
+          TF_VAR_dns_key_secret: ${{ secrets.DNS_KEY_SECRET }}
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: terraform
+        run: terraform apply tfplan
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PM_API_URL }}
+          TF_VAR_pm_user: ${{ secrets.PM_USER }}
+          TF_VAR_pm_password: ${{ secrets.PM_PASSWORD }}
+          TF_VAR_ci_password: ${{ secrets.CI_PASSWORD }}
+          TF_VAR_dns_key_secret: ${{ secrets.DNS_KEY_SECRET }}
+
+      - name: Upload plan as artifact (PR only)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.cluster }}
+          path: terraform/tfplan

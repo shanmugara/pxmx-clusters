@@ -1,0 +1,71 @@
+name: Cluster Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: "Cluster name (must match clusters/<name>.yaml)"
+        required: true
+        type: string
+      confirm:
+        description: "Type the cluster name again to confirm destruction"
+        required: true
+        type: string
+
+jobs:
+  destroy:
+    runs-on: [self-hosted, proxmox]
+    if: github.event.inputs.cluster == github.event.inputs.confirm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate cluster manifest exists
+        run: |
+          if [ ! -f "clusters/${{ github.event.inputs.cluster }}.yaml" ]; then
+            echo "ERROR: clusters/${{ github.event.inputs.cluster }}.yaml not found"
+            exit 1
+          fi
+
+      - name: Generate tfvars from cluster manifest
+        run: |
+          python3 scripts/yaml_to_tfvars.py \
+            clusters/${{ github.event.inputs.cluster }}.yaml \
+            terraform/generated.auto.tfvars
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=terraform-state" \
+            -backend-config="key=clusters/${{ github.event.inputs.cluster }}/terraform.tfstate" \
+            -backend-config="endpoint=${{ secrets.MINIO_ENDPOINT }}" \
+            -backend-config="access_key=${{ secrets.MINIO_ACCESS_KEY }}" \
+            -backend-config="secret_key=${{ secrets.MINIO_SECRET_KEY }}" \
+            -backend-config="region=us-east-1" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="force_path_style=true" \
+            -reconfigure
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PM_API_URL }}
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        run: terraform destroy -auto-approve
+        env:
+          TF_VAR_pm_api_url: ${{ secrets.PM_API_URL }}
+          TF_VAR_pm_user: ${{ secrets.PM_USER }}
+          TF_VAR_pm_password: ${{ secrets.PM_PASSWORD }}
+          TF_VAR_ci_password: ${{ secrets.CI_PASSWORD }}
+          TF_VAR_dns_key_secret: ${{ secrets.DNS_KEY_SECRET }}
+
+      - name: Remove cluster manifest after destroy
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rm clusters/${{ github.event.inputs.cluster }}.yaml
+          git commit -m "chore: remove destroyed cluster ${{ github.event.inputs.cluster }}"
+          git push

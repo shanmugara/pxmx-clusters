@@ -182,6 +182,38 @@ The runner will appear as **Online** in GitHub → Settings → Actions → Runn
 
 ---
 
+## First-Time GitHub Setup
+
+After pushing this repo to GitHub, complete these steps before workflows will run:
+
+### 1. Enable Actions
+**Settings → Actions → General → "Allow all actions and reusable workflows"** → Save
+
+### 2. Add Secrets
+**Settings → Secrets and variables → Actions → New repository secret**
+
+Add all secrets listed in the [GitHub Secrets](#github-secrets) section below.
+
+### 3. Register a self-hosted runner
+**Settings → Actions → Runners → New self-hosted runner**
+
+Select Linux, run the commands GitHub provides on your lab machine. When prompted for labels, ensure both `self-hosted` and `proxmox` are included. Then install as a service:
+```bash
+sudo ./svc.sh install && sudo ./svc.sh start
+```
+The runner will appear as **Online** in Settings → Actions → Runners once connected.
+
+### 4. Create the MinIO state bucket
+Before the first workflow run, ensure the `terraform-state` bucket exists in MinIO — `terraform init` will fail without it:
+```bash
+mc alias set minio https://minio.yourdomain.net ACCESS_KEY SECRET_KEY
+mc mb minio/terraform-state
+```
+
+Once the runner is online and secrets are set, push any change to a `clusters/*.yaml` file and the `cluster-apply` workflow will trigger automatically.
+
+---
+
 ## GitHub Secrets
 
 The following secrets must be set in your GitHub repo (**Settings → Secrets and variables → Actions**):

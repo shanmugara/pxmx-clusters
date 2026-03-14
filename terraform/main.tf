@@ -1,6 +1,6 @@
 module "vm" {
   # Pin to a specific tag for production stability, e.g. ?ref=v1.0.0
-  source   = "git::https://github.com/YOUR_GITHUB_ORG/pxmx-template.git//modules/vm?ref=main"
+  source   = "git::https://github.com/shanmugara/pxmx-template.git//modules/vm?ref=main"
   for_each = toset([for i in range(var.vm_qty) : "${var.vm_prefix}-${i + 1}"])
 
   name        = each.key

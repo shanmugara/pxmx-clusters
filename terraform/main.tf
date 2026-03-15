@@ -16,7 +16,7 @@ module "vm" {
   dns_zone = var.dns_zone
   dns_ttl  = var.dns_ttl
 
-  kea_api_url   = var.kea_api_url
+  kea_dhcp_url   = var.kea_dhcp_url
   kea_subnet_id = var.kea_subnet_id
 
   pm_api_url   = var.pm_api_url

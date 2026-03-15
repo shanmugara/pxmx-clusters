@@ -119,7 +119,7 @@ variable "dns_ttl" {
 }
 
 # ── Kea DHCP ──────────────────────────────────────────────────────────────────
-variable "kea_api_url" {
+variable "kea_dhcp_url" {
   description = "Kea Control Agent URL (optional)"
   type        = string
   default     = ""

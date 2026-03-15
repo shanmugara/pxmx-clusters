@@ -42,7 +42,8 @@ def main():
         ("force_reboot",  "force_reboot",  spec.get("force_reboot", False)),
         ("dns_zone",      "dns_zone",      spec.get("dns_zone", "")),
         ("dns_ttl",       "dns_ttl",       spec.get("dns_ttl", 300)),
-        ("kea_subnet_id", "kea_subnet_id", spec.get("kea_subnet_id", 1)),
+        ("kea_subnet_id", "kea_subnet_id", spec.get("kea_subnet_id", 2)),
+        ("kea_dhcp_url", "kea_dhcp_url",  spec.get("kea_dhcp_url", "http://omegart01.omegaworld.net:5000/ap1/v1"))
     ]
 
     lines = [

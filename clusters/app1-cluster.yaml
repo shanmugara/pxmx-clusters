@@ -23,7 +23,8 @@ spec:
   dns_ttl: 300
 
   # Kea DHCP settings (optional)
-  # kea_subnet_id: 1
+  # kea_subnet_id: 2
+  # kea_dhcp_url: "http://omegart01.omegaworld.net:5000/ap1/v1"
 
   # Misc
-  force_reboot: false
+  force_reboot: true

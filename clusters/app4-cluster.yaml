@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Cluster
 metadata:
-  name: app4-cluster
-  description: "App4 cluster"
+  name: app1-cluster
+  description: "App1 cluster"
 spec:
   # VM naming: nodes will be named <node_prefix>-1, <node_prefix>-2, etc.
-  node_prefix: app4
+  node_prefix: app1
   node_count: 2
 
   # Proxmox settings

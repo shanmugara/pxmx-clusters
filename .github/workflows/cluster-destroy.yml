@@ -16,11 +16,12 @@ jobs:
   destroy:
     runs-on: [self-hosted, proxmox]
     if: github.event.inputs.cluster == github.event.inputs.confirm
-    env:
-      HOME: ${{ runner.temp }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set HOME for self-hosted runner
+        run: echo "HOME=$RUNNER_TEMP" >> $GITHUB_ENV
 
       - name: Validate cluster manifest exists
         run: |

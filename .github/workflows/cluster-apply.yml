@@ -31,8 +31,6 @@ jobs:
     needs: detect
     runs-on: [self-hosted, proxmox]
     if: needs.detect.outputs.clusters != '[]'
-    env:
-      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:
@@ -40,6 +38,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set HOME for self-hosted runner
+        run: echo "HOME=$RUNNER_TEMP" >> $GITHUB_ENV
 
       - name: Generate tfvars from cluster manifest
         run: |

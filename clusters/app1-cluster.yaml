@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Cluster
 metadata:
   name: app1-cluster
-  description: "App1 test cluster iter2"
+  description: "App1 test cluster iter3"
 spec:
   # VM naming: nodes will be named <node_prefix>-1, <node_prefix>-2, etc.
   node_prefix: app1

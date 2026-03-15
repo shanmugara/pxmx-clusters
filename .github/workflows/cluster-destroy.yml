@@ -16,6 +16,8 @@ jobs:
   destroy:
     runs-on: [self-hosted, proxmox]
     if: github.event.inputs.cluster == github.event.inputs.confirm
+    env:
+      HOME: ${{ runner.temp }}
 
     steps:
       - uses: actions/checkout@v4

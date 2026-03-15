@@ -31,6 +31,8 @@ jobs:
     needs: detect
     runs-on: [self-hosted, proxmox]
     if: needs.detect.outputs.clusters != '[]'
+    env:
+      HOME: ${{ runner.temp }}
     strategy:
       fail-fast: false
       matrix:

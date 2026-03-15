@@ -45,6 +45,10 @@ jobs:
             clusters/${{ matrix.cluster }}.yaml \
             terraform/generated.auto.tfvars
 
+      - name: Configure git credentials for Terraform modules
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
       - name: Terraform Init
         working-directory: terraform
         run: |

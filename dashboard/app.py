@@ -284,7 +284,27 @@ def api_clusters():
                 ):
                     seen[key] = entry
 
-    results = sorted(seen.values(), key=lambda x: x["created_at"], reverse=True)
+    # ── Post-process: hide stale apply cards for destroyed clusters ──────────
+    # If the most recent destroy run for a cluster succeeded (or is active) and
+    # is newer than the most recent apply run, remove the apply card — the
+    # cluster no longer exists and showing both would be confusing.
+    filtered = {}
+    for key, entry in seen.items():
+        cluster  = entry["cluster"]
+        wf_type  = entry["workflow"]
+        destroy_entry = seen.get(f"{cluster}:destroy")
+
+        if wf_type == "apply" and destroy_entry:
+            destroy_active    = destroy_entry["status"] in ("queued", "in_progress")
+            destroy_succeeded = destroy_entry["conclusion"] == "success"
+            destroy_newer     = destroy_entry["created_at"] >= entry["created_at"]
+            if destroy_newer and (destroy_succeeded or destroy_active):
+                # Drop the apply card; only the destroy card will be shown
+                continue
+
+        filtered[key] = entry
+
+    results = sorted(filtered.values(), key=lambda x: x["created_at"], reverse=True)
     return jsonify(results)
 
 

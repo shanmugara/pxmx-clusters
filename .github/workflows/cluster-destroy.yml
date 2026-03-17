@@ -14,6 +14,7 @@ on:
 
 jobs:
   destroy:
+    name: terraform (${{ github.event.inputs.cluster }})
     runs-on: [self-hosted, proxmox]
     if: github.event.inputs.cluster == github.event.inputs.confirm
     permissions:

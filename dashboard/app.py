@@ -36,27 +36,42 @@ RUNS_PER_PAGE = 15
 
 # ── Step-to-progress mapping ───────────────────────────────────────────────────
 # Substring of step name (lowercase) → percent reached when that step COMPLETES
+# Keys shared between apply and destroy workflows are safe because each workflow
+# only contains the relevant subset of steps.
 STEP_DONE_PCT: dict[str, int] = {
-    "set home":            5,
-    "generate tfvars":    14,
-    "configure git":      20,
-    "terraform init":     38,
-    "terraform plan":     68,
-    "terraform apply":   100,
+    # --- shared ---
+    "set home":                    5,
+    "generate tfvars":            15,
+    "configure git":              22,
+    "terraform init":             38,
+    # --- apply-only ---
+    "terraform plan":             68,
+    "terraform apply":           100,
+    # --- destroy-only ---
+    "validate cluster":           10,
+    "terraform destroy":          95,
+    "remove cluster manifest":   100,
 }
 
 # Percent shown the moment a step becomes in_progress
 STEP_START_PCT: dict[str, int] = {
-    "set home":            2,
-    "generate tfvars":     8,
-    "configure git":      15,
-    "terraform init":     22,
-    "terraform plan":     40,
-    "terraform apply":    70,
+    # --- shared ---
+    "set home":                    2,
+    "generate tfvars":             8,
+    "configure git":              16,
+    "terraform init":             24,
+    # --- apply-only ---
+    "terraform plan":             40,
+    "terraform apply":            70,
+    # --- destroy-only ---
+    "validate cluster":            6,
+    "terraform destroy":           50,
+    "remove cluster manifest":     96,
 }
 
-# Assumed max seconds for terraform apply to complete (used for live sub-progress)
-APPLY_ESTIMATED_SECONDS = 300  # 5 minutes
+# Assumed max seconds for the long-running Terraform step (live sub-progress)
+APPLY_ESTIMATED_SECONDS   = 300  # 5 minutes
+DESTROY_ESTIMATED_SECONDS = 300  # 5 minutes
 
 # ── Simple in-process TTL cache (avoids hammering GitHub API) ─────────────────
 _cache: dict[str, tuple[float, object]] = {}
@@ -143,13 +158,20 @@ def compute_progress(steps: list) -> tuple[int, str]:
             current = step["name"]
             for key, p in STEP_START_PCT.items():
                 if key in n:
-                    # For terraform apply: gradually advance 70 → 99% over
-                    # the estimated apply duration so the bar doesn't stall
-                    if "terraform apply" in n:
+                    # For long-running terraform steps, gradually advance the
+                    # bar so it doesn't stall while waiting for completion.
+                    if "terraform apply" in n or "terraform destroy" in n:
+                        estimated = (
+                            DESTROY_ESTIMATED_SECONDS
+                            if "terraform destroy" in n
+                            else APPLY_ESTIMATED_SECONDS
+                        )
                         started = _parse_dt(step.get("started_at"))
                         if started:
                             elapsed_s = (datetime.now(timezone.utc) - started).total_seconds()
-                            sub = min(29, int(elapsed_s / APPLY_ESTIMATED_SECONDS * 29))
+                            # advance up to 44 points (50→94 for destroy, 70→99 for apply)
+                            headroom = 44
+                            sub = min(headroom, int(elapsed_s / estimated * headroom))
                             return p + sub, current
                     return max(pct, p), current
             # Step running but not in our map — stay at current pct

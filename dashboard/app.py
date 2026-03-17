@@ -46,7 +46,8 @@ STEP_DONE_PCT: dict[str, int] = {
     "terraform init":             38,
     # --- apply-only ---
     "terraform plan":             68,
-    "terraform apply":           100,
+    "terraform apply":            95,
+    "upload plan":               100,   # PR only — runs after apply is skipped
     # --- destroy-only ---
     "validate cluster":           10,
     "terraform destroy":          95,
@@ -63,6 +64,7 @@ STEP_START_PCT: dict[str, int] = {
     # --- apply-only ---
     "terraform plan":             40,
     "terraform apply":            70,
+    "upload plan":                96,   # PR only
     # --- destroy-only ---
     "validate cluster":            6,
     "terraform destroy":           50,
@@ -124,10 +126,10 @@ def get_jobs(run_id: int, is_active: bool) -> list:
     data = _cached_get(url, params, ttl=ttl)
     jobs = data.get("jobs", [])
     # If the run is now complete but cached job data still shows in_progress
-    # (fetched while the runner was still active), the stale value could be
-    # locked in the cache for up to 10 minutes. Force a fresh fetch so the
-    # final status is reflected on the very next poll.
-    if not is_active and any(j.get("status") == "in_progress" for j in jobs):
+    # or queued (fetched while the runner was still active), the stale value
+    # could be locked in the cache for up to 10 minutes. Force a fresh fetch
+    # so the final status is reflected on the very next poll.
+    if not is_active and any(j.get("status") in ("in_progress", "queued") for j in jobs):
         data = _cached_get(url, params, ttl=ttl, force=True)
         jobs = data.get("jobs", [])
     return jobs
@@ -177,11 +179,12 @@ def compute_progress(steps: list) -> tuple[int, str]:
             # Step running but not in our map — stay at current pct
             return max(pct, 1), current
 
-        if step["status"] == "completed" and step.get("conclusion") in ("success", "skipped"):
+        if step["status"] == "completed" and step.get("conclusion") == "success":
             current = step["name"]
             for key, p in STEP_DONE_PCT.items():
                 if key in n:
                     pct = max(pct, p)
+        # skipped steps are intentionally not run — don't advance the bar
 
     return pct, current
 

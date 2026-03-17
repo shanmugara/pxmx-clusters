@@ -137,6 +137,22 @@
       font-size: 0.75rem;
     }
 
+    .btn-cleanup {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--orange);
+      background: transparent;
+      color: var(--orange);
+      cursor: pointer;
+      letter-spacing: .02em;
+      transition: background .15s;
+      display: none;
+    }
+    .btn-cleanup.visible { display: inline-flex; align-items: center; gap: 5px; }
+    .btn-cleanup:hover   { background: var(--orange-dim); }
+
     /* ── Main grid ── */
     main { padding: 20px 24px; }
 
@@ -554,6 +570,9 @@
   <div class="toolbar">
     <span id="pulse-dot" class="pulse-dot"></span>
     <span id="status-text">Connecting…</span>
+    <button class="btn-cleanup" id="btn-cleanup" title="Delete all GitHub Actions runs for successfully destroyed clusters">
+      &#10005; Clean up destroyed
+    </button>
     <span class="cluster-count" id="cluster-count" style="display:none"></span>
   </div>
 
@@ -625,6 +644,7 @@
     const $pulseDot    = document.getElementById('pulse-dot');
     const $count       = document.getElementById('cluster-count');
     const $repoLink    = document.getElementById('repo-link');
+    const $btnCleanup  = document.getElementById('btn-cleanup');
 
     if (REPO_NAME) {
       $repoLink.href        = `https://github.com/${REPO_NAME}`;
@@ -782,10 +802,14 @@
               Push a change to <code>clusters/*.yaml</code> to trigger a run.
             </div>`;
           $count.style.display = 'none';
+          $btnCleanup.classList.remove('visible');
         } else {
           $grid.innerHTML = data.map(renderCard).join('');
           $count.textContent = `${data.length} cluster${data.length !== 1 ? 's' : ''}`;
           $count.style.display = '';
+          // Show cleanup button if any card is a completed-success destroy
+          const hasDestroyed = data.some(c => c.workflow === 'destroy' && c.conclusion === 'success');
+          $btnCleanup.classList.toggle('visible', hasDestroyed);
         }
 
         $statusText.textContent = `Updated ${new Date().toLocaleTimeString()}`;
@@ -961,6 +985,47 @@
       } finally {
         $btnApply.disabled    = false;
         $btnApply.textContent = 'Apply';
+      }
+    });
+
+    // ── Clean up destroyed clusters ────────────────────────────────────────
+    $btnCleanup.addEventListener('click', async () => {
+      if (!confirm(
+        'This will permanently delete all GitHub Actions workflow runs ' +
+        '(apply + destroy) for clusters that have been successfully destroyed.\n\n' +
+        'The runs will no longer appear in this dashboard or in GitHub Actions history.\n\n' +
+        'Continue?'
+      )) return;
+
+      $btnCleanup.textContent  = 'Cleaning up\u2026';
+      $btnCleanup.disabled     = true;
+
+      try {
+        const resp = await fetch('/api/cleanup-destroyed', { method: 'POST' });
+        const data = await resp.json();
+
+        if (data.ok) {
+          const n = data.deleted.length;
+          const clusters = (data.clusters || []).join(', ');
+          $btnCleanup.classList.remove('visible');
+          showError(`\u2713 Cleaned up ${n} run${n !== 1 ? 's' : ''} for: ${clusters}`);
+          // Use green styling for success (override red)
+          document.getElementById('error-banner').style.background = 'var(--green-dim)';
+          document.getElementById('error-banner').style.borderColor = 'var(--green)';
+          document.getElementById('error-banner').style.color       = 'var(--green)';
+          setTimeout(() => {
+            hideError();
+            document.getElementById('error-banner').style = '';
+            refresh();
+          }, 3000);
+        } else {
+          showError(`Clean up partially failed: ${(data.errors || []).join('; ')}`);
+        }
+      } catch (err) {
+        showError(`Request failed: ${err.message}`);
+      } finally {
+        $btnCleanup.textContent = '\u2715 Clean up destroyed';
+        $btnCleanup.disabled    = false;
       }
     });
 

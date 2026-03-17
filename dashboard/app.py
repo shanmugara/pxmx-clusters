@@ -325,6 +325,109 @@ def api_clusters():
     return jsonify(results)
 
 
+@app.route("/api/cleanup-destroyed", methods=["POST"])
+def api_cleanup_destroyed():
+    """
+    Delete ALL GitHub Actions workflow runs (apply + destroy) for clusters
+    whose most recent destroy run completed successfully.
+
+    Requires the GITHUB_TOKEN to have actions:write (or repo) scope.
+    Returns a summary of deleted run IDs.
+    """
+    if not GITHUB_TOKEN:
+        return jsonify({"error": "GITHUB_TOKEN env var is not set"}), 500
+    if not GITHUB_REPO:
+        return jsonify({"error": "GITHUB_REPO env var is not set"}), 500
+
+    # ── Step 1: identify "destroyed" clusters (same logic as api_clusters) ──
+    # We need the full per-workflow-type best entry to determine which clusters
+    # have a successful destroy as their most recent run.
+    seen_best: dict[str, dict] = {}  # key = "cluster:wf_type" → best entry
+
+    # Collect ALL run IDs per cluster across both workflows for bulk deletion
+    all_run_ids_by_cluster: dict[str, set[int]] = {}  # cluster → set of run_ids
+
+    for wf_file in [APPLY_WORKFLOW, DESTROY_WORKFLOW]:
+        wf_type = "apply" if "apply" in wf_file else "destroy"
+        for run in get_runs(wf_file):
+            run_id      = run["id"]
+            run_status  = run["status"]
+            run_created = run["created_at"]
+            is_active   = run_status in ("queued", "in_progress")
+            jobs        = get_jobs(run_id, is_active)
+            for job in jobs:
+                cluster = cluster_from_job(job["name"])
+                if not cluster:
+                    continue
+                # Track every run_id we've seen for this cluster
+                all_run_ids_by_cluster.setdefault(cluster, set()).add(run_id)
+                # Also track the best entry per key (for destroyed-cluster detection)
+                job_status     = job["status"]
+                job_conclusion = job["conclusion"]
+                entry = {
+                    "cluster":    cluster,
+                    "workflow":   wf_type,
+                    "status":     job_status,
+                    "conclusion": job_conclusion,
+                    "created_at": run_created,
+                    "run_id":     run_id,
+                }
+                key  = f"{cluster}:{wf_type}"
+                prev = seen_best.get(key)
+                if (
+                    not prev
+                    or (job_status == "in_progress" and prev["status"] != "in_progress")
+                    or (job_status == prev["status"] and run_created > prev["created_at"])
+                ):
+                    seen_best[key] = entry
+
+    # ── Step 2: find clusters whose best destroy run succeeded ───────────────
+    destroyed_clusters: set[str] = set()
+    for key, entry in seen_best.items():
+        if entry["workflow"] != "destroy" or entry["conclusion"] != "success":
+            continue
+        cluster = entry["cluster"]
+        apply_entry = seen_best.get(f"{cluster}:apply")
+        # Only clean up if destroy is newer than the apply (or no apply exists)
+        if not apply_entry or entry["created_at"] >= apply_entry["created_at"]:
+            destroyed_clusters.add(cluster)
+
+    if not destroyed_clusters:
+        return jsonify({"ok": True, "deleted": [], "message": "No destroyed clusters to clean up."})
+
+    # ── Step 3: delete all workflow runs for those clusters ──────────────────
+    deleted: list[int] = []
+    errors:  list[str] = []
+
+    for cluster in destroyed_clusters:
+        for run_id in all_run_ids_by_cluster.get(cluster, set()):
+            url = f"{API_BASE}/repos/{GITHUB_REPO}/actions/runs/{run_id}"
+            try:
+                resp = requests.delete(url, headers=_headers(), timeout=10)
+                if resp.status_code == 204:
+                    deleted.append(run_id)
+                    # Evict any cache entries referencing this run
+                    keys_to_drop = [k for k in _cache if str(run_id) in k]
+                    for k in keys_to_drop:
+                        _cache.pop(k, None)
+                else:
+                    errors.append(f"run {run_id}: HTTP {resp.status_code}")
+            except requests.RequestException as exc:
+                errors.append(f"run {run_id}: {exc}")
+
+    # Also bust the runs-list cache so the next poll sees empty history
+    runs_cache_keys = [k for k in _cache if "/actions/workflows/" in k and "/runs" in k]
+    for k in runs_cache_keys:
+        _cache.pop(k, None)
+
+    return jsonify({
+        "ok":      len(errors) == 0,
+        "deleted": deleted,
+        "clusters": sorted(destroyed_clusters),
+        "errors":  errors,
+    })
+
+
 @app.route("/api/destroy/<cluster>", methods=["POST"])
 def api_destroy(cluster: str):
     """Trigger the cluster-destroy workflow via workflow_dispatch."""

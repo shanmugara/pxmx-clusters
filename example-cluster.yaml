@@ -10,7 +10,7 @@ spec:
 
   # Proxmox settings
   target_node: omegakvm002
-  template: ubuntu-24.04-cloud-init-template
+  template: ubuntu-24.04-template
   bridge: vmbr0
 
   # VM resources

@@ -80,6 +80,34 @@
     }
     .repo-link:hover { opacity: 1; text-decoration: underline; }
 
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+      padding: 0 24px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 10px 16px;
+      margin-bottom: -1px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--blue);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
     /* ── Toolbar ── */
     .toolbar {
       display: flex;
@@ -415,6 +443,96 @@
     }
     .btn-confirm-destroy:disabled { opacity: .35; cursor: not-allowed; }
     .btn-confirm-destroy:not(:disabled):hover { opacity: .85; }
+
+    /* ── Create Cluster panel ── */
+    .create-panel {
+      max-width: 740px;
+      margin: 28px auto;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .create-panel h2 {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .create-panel p {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .yaml-editor {
+      width: 100%;
+      min-height: 360px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+      tab-size: 2;
+    }
+    .yaml-editor:focus { border-color: var(--blue); }
+    .create-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-apply {
+      padding: 7px 20px;
+      border-radius: 5px;
+      border: none;
+      background: var(--blue);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-apply:disabled { opacity: .35; cursor: not-allowed; }
+    .btn-apply:not(:disabled):hover { opacity: .85; }
+    .btn-reset {
+      padding: 7px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .btn-reset:hover { border-color: var(--border-hover); color: var(--text); }
+    .create-status {
+      font-size: 0.82rem;
+      padding: 8px 12px;
+      border-radius: 5px;
+      display: none;
+    }
+    .create-status.success {
+      display: block;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+    .create-status.error {
+      display: block;
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+    .cluster-name-preview {
+      font-size: 0.78rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+    .cluster-name-preview span {
+      color: var(--blue);
+      font-weight: 600;
+    }
   </style>
 </head>
 
@@ -439,13 +557,40 @@
     <span class="cluster-count" id="cluster-count" style="display:none"></span>
   </div>
 
-  <main>
-    <div id="error-banner" class="error-banner" style="display:none">
-      <span>⚠</span>
-      <span id="error-text"></span>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="clusters">Clusters</button>
+    <button class="tab-btn" data-tab="create">+ Create Cluster</button>
+  </nav>
+
+  <div id="tab-clusters" class="tab-panel active">
+    <main>
+      <div id="error-banner" class="error-banner" style="display:none">
+        <span>&#9888;</span>
+        <span id="error-text"></span>
+      </div>
+      <div class="grid" id="grid"></div>
+    </main>
+  </div>
+
+  <div id="tab-create" class="tab-panel">
+    <div class="create-panel">
+      <h2>Create a New Cluster</h2>
+      <p>
+        Edit the cluster manifest below. The cluster name is taken from
+        <code style="font-size:0.8rem;background:var(--surface-2);padding:1px 5px;border-radius:3px">metadata.name</code>
+        and the file will be committed to
+        <code style="font-size:0.8rem;background:var(--surface-2);padding:1px 5px;border-radius:3px">clusters/&lt;name&gt;.yaml</code>,
+        triggering the apply workflow automatically.
+      </p>
+      <div class="cluster-name-preview" id="create-name-preview">File will be saved as: <span id="create-name-span"></span></div>
+      <textarea class="yaml-editor" id="yaml-editor" spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
+      <div id="create-status" class="create-status"></div>
+      <div class="create-actions">
+        <button class="btn-apply" id="btn-apply">Apply</button>
+        <button class="btn-reset" id="btn-reset">Reset to template</button>
+      </div>
     </div>
-    <div class="grid" id="grid"></div>
-  </main>
+  </div>
 
   <!-- Destroy confirmation modal -->
   <div class="modal-overlay" id="destroy-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -485,6 +630,22 @@
       $repoLink.href        = `https://github.com/${REPO_NAME}`;
       $repoLink.textContent = REPO_NAME;
     }
+
+    // ── Tab switching ──────────────────────────────────────────────────────
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        // Pause/resume polling dot animation based on active tab
+        if (btn.dataset.tab === 'clusters') {
+          $pulseDot.style.display = '';
+        } else {
+          $pulseDot.style.display = 'none';
+        }
+      });
+    });
 
     // ── HTML escaping ──────────────────────────────────────────────────────
     function esc(s) {
@@ -710,6 +871,96 @@
         $modalConfirm.disabled    = false;
         showError(`Request failed: ${err.message}`);
         closeModal();
+      }
+    });
+
+    // ── Create Cluster ─────────────────────────────────────────────────────
+    const $editor      = document.getElementById('yaml-editor');
+    const $btnApply    = document.getElementById('btn-apply');
+    const $btnReset    = document.getElementById('btn-reset');
+    const $createStatus= document.getElementById('create-status');
+    const $namePreview = document.getElementById('create-name-preview');
+    const $nameSpan    = document.getElementById('create-name-span');
+
+    let _templateText  = '';
+
+    // Load template on startup
+    fetch('/api/template')
+      .then(r => r.text())
+      .then(t => {
+        _templateText = t;
+        $editor.value = t;
+        syncNamePreview();
+      });
+
+    function syncNamePreview() {
+      const match = $editor.value.match(/^[ \t]*name:\s*(.+)$/m);
+      const name  = match ? match[1].trim() : '';
+      if (name) {
+        $nameSpan.textContent = `clusters/${name}.yaml`;
+        $namePreview.style.display = '';
+      } else {
+        $namePreview.style.display = 'none';
+      }
+    }
+
+    $editor.addEventListener('input', syncNamePreview);
+
+    // Support Tab key for indentation inside the editor
+    $editor.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = $editor.selectionStart;
+        const v = $editor.value;
+        $editor.value = v.slice(0, s) + '  ' + v.slice($editor.selectionEnd);
+        $editor.selectionStart = $editor.selectionEnd = s + 2;
+      }
+    });
+
+    $btnReset.addEventListener('click', () => {
+      $editor.value = _templateText;
+      syncNamePreview();
+      setCreateStatus('', '');
+    });
+
+    function setCreateStatus(type, msg) {
+      $createStatus.className = `create-status${type ? ' ' + type : ''}`;
+      $createStatus.textContent = msg;
+      $createStatus.style.display = msg ? '' : 'none';
+    }
+
+    $btnApply.addEventListener('click', async () => {
+      setCreateStatus('', '');
+      const manifest = $editor.value.trim();
+      if (!manifest) { setCreateStatus('error', 'Manifest is empty.'); return; }
+
+      $btnApply.disabled     = true;
+      $btnApply.textContent  = 'Applying\u2026';
+
+      try {
+        const resp = await fetch('/api/create-cluster', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manifest }),
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          setCreateStatus('success',
+            `\u2713 Committed ${data.path} \u2014 apply workflow is now queued.`);
+          // Switch to clusters tab after a short delay so user sees the new run
+          setTimeout(() => {
+            document.querySelector('.tab-btn[data-tab="clusters"]').click();
+            refresh();
+          }, 1800);
+        } else {
+          setCreateStatus('error', data.error ?? 'Unknown error');
+        }
+      } catch (err) {
+        setCreateStatus('error', `Request failed: ${err.message}`);
+      } finally {
+        $btnApply.disabled    = false;
+        $btnApply.textContent = 'Apply';
       }
     });
 

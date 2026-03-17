@@ -14,10 +14,12 @@ Optional:
 import os
 import re
 import time
+import base64
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, render_template
+import yaml
+from flask import Flask, jsonify, render_template, request
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
@@ -27,6 +29,18 @@ API_BASE     = "https://api.github.com"
 APPLY_WORKFLOW   = "cluster-apply.yml"
 DESTROY_WORKFLOW = "cluster-destroy.yml"
 GITHUB_REF       = os.environ.get("GITHUB_REF", "main")  # branch to dispatch against
+
+# Path to the example cluster template (relative to this file's parent directory)
+_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "example-cluster.yaml")
+
+def _load_template() -> str:
+    try:
+        with open(_TEMPLATE_PATH) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+CLUSTER_TEMPLATE = _load_template()
 
 # Allowed characters in a cluster name (matches file-system / k8s name conventions)
 _CLUSTER_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$')
@@ -337,6 +351,79 @@ def api_destroy(cluster: str):
         )
         if resp.status_code == 204:
             return jsonify({"ok": True})
+        return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
+    except requests.RequestException as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/template")
+def api_template():
+    """Return the example cluster YAML as plain text."""
+    return CLUSTER_TEMPLATE, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/api/create-cluster", methods=["POST"])
+def api_create_cluster():
+    """
+    Validate submitted YAML, extract the cluster name, and commit the file
+    to clusters/<name>.yaml via the GitHub Contents API — which automatically
+    triggers the cluster-apply workflow.
+    """
+    if not GITHUB_TOKEN:
+        return jsonify({"error": "GITHUB_TOKEN env var is not set"}), 500
+    if not GITHUB_REPO:
+        return jsonify({"error": "GITHUB_REPO env var is not set"}), 500
+
+    body = request.get_json(silent=True) or {}
+    manifest = body.get("manifest", "")
+    if not manifest or not manifest.strip():
+        return jsonify({"error": "manifest is required"}), 400
+
+    # ── Parse and validate YAML ──────────────────────────────────────────────
+    try:
+        doc = yaml.safe_load(manifest)
+    except yaml.YAMLError as exc:
+        return jsonify({"error": f"Invalid YAML: {exc}"}), 400
+
+    if not isinstance(doc, dict):
+        return jsonify({"error": "Manifest must be a YAML mapping"}), 400
+
+    cluster_name = (doc.get("metadata") or {}).get("name", "").strip()
+    if not cluster_name:
+        return jsonify({"error": "metadata.name is required"}), 400
+    if not _CLUSTER_NAME_RE.match(cluster_name):
+        return jsonify({"error": f"Invalid cluster name '{cluster_name}': must match [a-zA-Z0-9][a-zA-Z0-9_-]{{0,62}}"}), 400
+
+    file_path = f"clusters/{cluster_name}.yaml"
+
+    # ── Check if the file already exists (get its SHA for update, or error) ─
+    contents_url = f"{API_BASE}/repos/{GITHUB_REPO}/contents/{file_path}"
+    existing = _gh_get(contents_url)
+    if existing.get("sha") and not body.get("overwrite"):
+        return jsonify({
+            "error": f"clusters/{cluster_name}.yaml already exists. Set overwrite=true to replace it.",
+            "exists": True,
+        }), 409
+
+    # ── Commit the file via GitHub Contents API ──────────────────────────────
+    content_b64 = base64.b64encode(manifest.encode()).decode()
+    commit_payload: dict = {
+        "message": f"feat: add cluster {cluster_name}",
+        "content": content_b64,
+        "branch":  GITHUB_REF,
+    }
+    if existing.get("sha"):
+        commit_payload["sha"] = existing["sha"]  # required for updates
+
+    try:
+        resp = requests.put(
+            contents_url,
+            headers=_headers(),
+            json=commit_payload,
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            return jsonify({"ok": True, "cluster": cluster_name, "path": file_path})
         return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
     except requests.RequestException as exc:
         return jsonify({"error": str(exc)}), 502

@@ -294,6 +294,96 @@
       flex-shrink: 0;
     }
     .run-link:hover { text-decoration: underline; }
+
+    /* ── Destroy button ── */
+    .btn-destroy {
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--red);
+      background: transparent;
+      color: var(--red);
+      cursor: pointer;
+      letter-spacing: .03em;
+      transition: background .15s, color .15s;
+    }
+    .btn-destroy:hover  { background: var(--red-dim); }
+    .btn-destroy:active { opacity: .75; }
+
+    /* ── Confirmation modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: min(420px, 90vw);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--red);
+    }
+    .modal-body {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .modal-body strong { color: var(--text); }
+    .modal-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 0.88rem;
+      padding: 7px 10px;
+      outline: none;
+    }
+    .modal-input:focus { border-color: var(--red); }
+    .modal-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .btn-cancel {
+      padding: 6px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .btn-cancel:hover { border-color: var(--border-hover); }
+    .btn-confirm-destroy {
+      padding: 6px 16px;
+      border-radius: 5px;
+      border: none;
+      background: var(--red);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-confirm-destroy:disabled { opacity: .35; cursor: not-allowed; }
+    .btn-confirm-destroy:not(:disabled):hover { opacity: .85; }
   </style>
 </head>
 
@@ -325,6 +415,26 @@
     </div>
     <div class="grid" id="grid"></div>
   </main>
+
+  <!-- Destroy confirmation modal -->
+  <div class="modal-overlay" id="destroy-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-title">&#9888; Confirm Cluster Destruction</div>
+      <div class="modal-body">
+        This will trigger <strong>terraform destroy</strong> for cluster
+        <strong id="modal-cluster-label"></strong>. All VMs in this cluster will be
+        permanently deleted from Proxmox.<br><br>
+        Type the cluster name to confirm:
+      </div>
+      <input class="modal-input" id="modal-confirm-input" type="text"
+             autocomplete="off" spellcheck="false"
+             placeholder="cluster name" />
+      <div class="modal-foot">
+        <button class="btn-cancel" id="modal-cancel">Cancel</button>
+        <button class="btn-confirm-destroy" id="modal-confirm-btn" disabled>Destroy</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     'use strict';
@@ -418,6 +528,7 @@
       const badge = badgeClass(state);
       const fill  = fillClass(state);
       const pCls  = pctClass(state);
+      const showDestroy = c.workflow === 'apply' && state === 'success';
 
       return `
         <div class="card state-${esc(state)}">
@@ -443,11 +554,14 @@
           <div class="card-foot">
             <div class="foot-left">
               <span class="wf-pill">${esc(c.workflow)}</span>
-              ${c.duration ? `<span class="duration">⏱ ${esc(c.duration)}</span>` : ''}
+              ${c.duration ? `<span class="duration">&#9201; ${esc(c.duration)}</span>` : ''}
             </div>
-            <a class="run-link" href="${esc(c.run_url)}" target="_blank" rel="noopener">
-              View run →
-            </a>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${showDestroy ? `<button class="btn-destroy" data-cluster="${esc(c.cluster)}" onclick="confirmDestroy(this.dataset.cluster)">Destroy</button>` : ''}
+              <a class="run-link" href="${esc(c.run_url)}" target="_blank" rel="noopener">
+                View run &#8594;
+              </a>
+            </div>
           </div>
 
         </div>`;
@@ -499,6 +613,74 @@
     function hideError() {
       $error.style.display = 'none';
     }
+
+    // ── Destroy modal ──────────────────────────────────────────────────────
+    const $modal        = document.getElementById('destroy-modal');
+    const $modalLabel   = document.getElementById('modal-cluster-label');
+    const $modalInput   = document.getElementById('modal-confirm-input');
+    const $modalConfirm = document.getElementById('modal-confirm-btn');
+    const $modalCancel  = document.getElementById('modal-cancel');
+
+    let _pendingCluster = null;
+
+    function confirmDestroy(cluster) {
+      _pendingCluster            = cluster;
+      $modalLabel.textContent    = cluster;
+      $modalInput.value          = '';
+      $modalConfirm.disabled     = true;
+      $modalConfirm.textContent  = 'Destroy';
+      $modal.classList.add('open');
+      $modalInput.focus();
+    }
+
+    function closeModal() {
+      $modal.classList.remove('open');
+      _pendingCluster = null;
+    }
+
+    $modalInput.addEventListener('input', () => {
+      $modalConfirm.disabled = ($modalInput.value !== _pendingCluster);
+    });
+
+    $modalCancel.addEventListener('click', closeModal);
+
+    // Close on backdrop click
+    $modal.addEventListener('click', e => { if (e.target === $modal) closeModal(); });
+
+    // Close on Escape
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    $modalConfirm.addEventListener('click', async () => {
+      const cluster = _pendingCluster;
+      if (!cluster || $modalInput.value !== cluster) return;
+
+      $modalConfirm.disabled        = true;
+      $modalConfirm.textContent     = 'Triggering\u2026';
+
+      try {
+        const resp = await fetch(`/api/destroy/${encodeURIComponent(cluster)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          closeModal();
+          // Give GitHub a moment, then refresh to pick up the new queued run
+          setTimeout(refresh, 3000);
+        } else {
+          $modalConfirm.textContent = 'Destroy';
+          $modalConfirm.disabled    = false;
+          showError(`Destroy failed: ${data.error ?? 'unknown error'}`);
+          closeModal();
+        }
+      } catch (err) {
+        $modalConfirm.textContent = 'Destroy';
+        $modalConfirm.disabled    = false;
+        showError(`Request failed: ${err.message}`);
+        closeModal();
+      }
+    });
 
     // Initial load + polling
     refresh();

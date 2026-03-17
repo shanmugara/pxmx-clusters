@@ -26,6 +26,10 @@ API_BASE     = "https://api.github.com"
 
 APPLY_WORKFLOW   = "cluster-apply.yml"
 DESTROY_WORKFLOW = "cluster-destroy.yml"
+GITHUB_REF       = os.environ.get("GITHUB_REF", "main")  # branch to dispatch against
+
+# Allowed characters in a cluster name (matches file-system / k8s name conventions)
+_CLUSTER_NAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$')
 
 # How many recent workflow runs to inspect per workflow file
 RUNS_PER_PAGE = 15
@@ -57,10 +61,10 @@ APPLY_ESTIMATED_SECONDS = 300  # 5 minutes
 # ── Simple in-process TTL cache (avoids hammering GitHub API) ─────────────────
 _cache: dict[str, tuple[float, object]] = {}
 
-def _cached_get(url: str, params: dict | None = None, ttl: int = 30) -> dict:
+def _cached_get(url: str, params: dict | None = None, ttl: int = 30, force: bool = False) -> dict:
     key = url + str(sorted((params or {}).items()))
     now = time.monotonic()
-    if key in _cache and now - _cache[key][0] < ttl:
+    if not force and key in _cache and now - _cache[key][0] < ttl:
         return _cache[key][1]
     result = _gh_get(url, params)
     _cache[key] = (now, result)
@@ -100,12 +104,18 @@ def get_jobs(run_id: int, is_active: bool) -> list:
     # Active (in_progress/queued) runs: refresh every 15 s
     # Completed runs: cache for 10 min (they never change)
     ttl = 15 if is_active else 600
-    data = _cached_get(
-        f"{API_BASE}/repos/{GITHUB_REPO}/actions/runs/{run_id}/jobs",
-        {"per_page": 100},
-        ttl=ttl,
-    )
-    return data.get("jobs", [])
+    url = f"{API_BASE}/repos/{GITHUB_REPO}/actions/runs/{run_id}/jobs"
+    params = {"per_page": 100}
+    data = _cached_get(url, params, ttl=ttl)
+    jobs = data.get("jobs", [])
+    # If the run is now complete but cached job data still shows in_progress
+    # (fetched while the runner was still active), the stale value could be
+    # locked in the cache for up to 10 minutes. Force a fresh fetch so the
+    # final status is reflected on the very next poll.
+    if not is_active and any(j.get("status") == "in_progress" for j in jobs):
+        data = _cached_get(url, params, ttl=ttl, force=True)
+        jobs = data.get("jobs", [])
+    return jobs
 
 
 # ── Progress computation ───────────────────────────────────────────────────────
@@ -254,6 +264,37 @@ def api_clusters():
 
     results = sorted(seen.values(), key=lambda x: x["created_at"], reverse=True)
     return jsonify(results)
+
+
+@app.route("/api/destroy/<cluster>", methods=["POST"])
+def api_destroy(cluster: str):
+    """Trigger the cluster-destroy workflow via workflow_dispatch."""
+    if not GITHUB_TOKEN:
+        return jsonify({"error": "GITHUB_TOKEN env var is not set"}), 500
+    if not GITHUB_REPO:
+        return jsonify({"error": "GITHUB_REPO env var is not set"}), 500
+    if not _CLUSTER_NAME_RE.match(cluster):
+        return jsonify({"error": "Invalid cluster name"}), 400
+
+    url = f"{API_BASE}/repos/{GITHUB_REPO}/actions/workflows/{DESTROY_WORKFLOW}/dispatches"
+    try:
+        resp = requests.post(
+            url,
+            headers=_headers(),
+            json={
+                "ref": GITHUB_REF,
+                "inputs": {
+                    "cluster": cluster,
+                    "confirm": cluster,  # workflow guards on cluster == confirm
+                },
+            },
+            timeout=10,
+        )
+        if resp.status_code == 204:
+            return jsonify({"ok": True})
+        return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
+    except requests.RequestException as exc:
+        return jsonify({"error": str(exc)}), 502
 
 
 @app.route("/")

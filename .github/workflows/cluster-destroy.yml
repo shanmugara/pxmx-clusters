@@ -81,6 +81,18 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           mkdir -p destroyed
+          # Ensure both folders always have a .gitkeep so they are never dropped
+          # from the repository even when empty.
+          touch clusters/.gitkeep destroyed/.gitkeep
+          git add clusters/.gitkeep destroyed/.gitkeep
           git mv clusters/${{ github.event.inputs.cluster }}.yaml destroyed/${{ github.event.inputs.cluster }}.yaml
+          # If clusters/ is now empty (no remaining *.yaml), the .gitkeep above
+          # is all that remains — it was already staged, nothing more to do.
+          remaining=$(find clusters -maxdepth 1 -name '*.yaml' | wc -l)
+          if [ "$remaining" -gt 0 ]; then
+            # Still has manifests; unstage the .gitkeep we just added (not needed)
+            git restore --staged clusters/.gitkeep || true
+            rm -f clusters/.gitkeep
+          fi
           git commit -m "chore: archive destroyed cluster ${{ github.event.inputs.cluster }}"
           git push

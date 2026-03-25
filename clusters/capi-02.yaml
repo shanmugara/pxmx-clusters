@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Cluster
+metadata:
+  name: capi-02
+  description: "CAPI cluster 02"
+spec:
+  # VM naming: nodes will be named <node_prefix>-1, <node_prefix>-2, etc.
+  node_prefix: capi-02
+  node_count: 4
+
+  # Proxmox settings
+  target_node: omegakvm002
+  template: ubuntu-24.04-template
+  bridge: vmbr0
+
+  # VM resources
+  cores: 2
+  memory: 4096
+  disk_size: "40G"
+
+  # DNS settings
+  dns_zone: "omegaworld.net."
+  dns_ttl: 300
+
+  # Kea DHCP settings (optional)
+  # kea_subnet_id: 1
+
+  # Misc
+  force_reboot: false

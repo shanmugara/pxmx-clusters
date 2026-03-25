@@ -1,0 +1,30 @@
+# Optional Ingress — uncomment and customise for your ingress controller.
+# This example uses the nginx ingress controller with cert-manager TLS.
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: pxmx-dashboard
+#   namespace: pxmx-dashboard
+#   labels:
+#     app.kubernetes.io/name: pxmx-dashboard
+#   annotations:
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+# spec:
+#   ingressClassName: nginx
+#   tls:
+#     - hosts:
+#         - dashboard.example.com
+#       secretName: pxmx-dashboard-tls
+#   rules:
+#     - host: dashboard.example.com
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: pxmx-dashboard
+#                 port:
+#                   name: http

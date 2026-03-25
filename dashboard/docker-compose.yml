@@ -1,0 +1,35 @@
+# pxmx-clusters dashboard — local development / smoke-test
+#
+# Usage:
+#   cp .env.example .env          # fill in GITHUB_TOKEN and GITHUB_REPO
+#   docker compose up --build
+#   open http://localhost:5001
+#
+# Build context is the REPO ROOT so the example-cluster.yaml is available.
+
+services:
+  dashboard:
+    build:
+      context: ..           # repo root
+      dockerfile: dashboard/Dockerfile
+    image: pxmx-dashboard:local
+    container_name: pxmx-dashboard
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5001}:5001"
+    environment:
+      GITHUB_TOKEN: "${GITHUB_TOKEN:?GITHUB_TOKEN must be set}"
+      GITHUB_REPO:  "${GITHUB_REPO:?GITHUB_REPO must be set (e.g. owner/pxmx-clusters)}"
+      GITHUB_REF:   "${GITHUB_REF:-main}"
+      LOG_LEVEL:    "${LOG_LEVEL:-info}"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz')"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+    read_only: true
+    # Gunicorn needs a writable /tmp for its worker temp files
+    tmpfs:
+      - /tmp

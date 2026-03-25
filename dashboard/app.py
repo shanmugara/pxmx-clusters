@@ -159,7 +159,7 @@ def _parse_dt(s: str | None) -> datetime | None:
         return None
 
 
-def compute_progress(steps: list) -> tuple[int, str]:
+def compute_progress(steps: list, node_count: int = 1) -> tuple[int, str]:
     """Return (percent, current_step_name) based on GitHub step statuses."""
     pct = 0
     current = "Starting…"
@@ -180,7 +180,7 @@ def compute_progress(steps: list) -> tuple[int, str]:
                         estimated = (
                             DESTROY_ESTIMATED_SECONDS
                             if "terraform destroy" in n
-                            else APPLY_ESTIMATED_SECONDS
+                            else APPLY_ESTIMATED_SECONDS * max(1, node_count)
                         )
                         started = _parse_dt(step.get("started_at"))
                         if started:
@@ -188,6 +188,10 @@ def compute_progress(steps: list) -> tuple[int, str]:
                             # advance up to 44 points (50→94 for destroy, 70→99 for apply)
                             headroom = 44
                             sub = min(headroom, int(elapsed_s / estimated * headroom))
+                            # For multi-VM apply, show estimated per-VM progress
+                            if "terraform apply" in n and node_count > 1:
+                                vm_idx = min(node_count - 1, int(elapsed_s / APPLY_ESTIMATED_SECONDS))
+                                current = f"{step['name']} · VM {vm_idx + 1}/{node_count}"
                             return p + sub, current
                     return max(pct, p), current
             # Step running but not in our map — stay at current pct
@@ -224,6 +228,23 @@ def cluster_from_job(name: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _get_node_count(cluster: str) -> int:
+    """Return spec.node_count from clusters/<cluster>.yaml in the repo. Defaults to 1."""
+    data = _cached_get(
+        f"{API_BASE}/repos/{GITHUB_REPO}/contents/clusters/{cluster}.yaml",
+        ttl=300,
+    )
+    content_b64 = data.get("content", "")
+    if not content_b64:
+        return 1
+    try:
+        raw = base64.b64decode(content_b64).decode("utf-8")
+        parsed = yaml.safe_load(raw)
+        return max(1, int(parsed.get("spec", {}).get("node_count", 1)))
+    except Exception:
+        return 1
+
+
 # ── Main API route ─────────────────────────────────────────────────────────────
 app = Flask(__name__)
 
@@ -258,12 +279,16 @@ def api_clusters():
                 steps          = job.get("steps", [])
 
                 # ── Calculate percent + current step ──
+                node_count = _get_node_count(cluster) if wf_type == "apply" else 1
                 if job_status == "completed":
                     if job_conclusion == "success":
-                        verb = "Apply" if wf_type == "apply" else "Destroy"
-                        pct, current_step = 100, f"{verb} completed — SUCCESS"
+                        if wf_type == "apply":
+                            noun = f"{node_count} VM{'s' if node_count != 1 else ''}"
+                            pct, current_step = 100, f"Apply completed — {noun} created"
+                        else:
+                            pct, current_step = 100, "Destroy completed — SUCCESS"
                     elif job_conclusion in ("failure", "timed_out"):
-                        pct, _ = compute_progress(steps)
+                        pct, _ = compute_progress(steps, node_count=node_count)
                         failed = next(
                             (s["name"] for s in steps if s.get("conclusion") == "failure"),
                             "Unknown step",
@@ -272,7 +297,7 @@ def api_clusters():
                     else:
                         pct, current_step = 0, "Cancelled"
                 elif job_status == "in_progress":
-                    pct, current_step = compute_progress(steps)
+                    pct, current_step = compute_progress(steps, node_count=node_count)
                 else:
                     pct, current_step = 0, "Queued"
 

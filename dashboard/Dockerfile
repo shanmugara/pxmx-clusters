@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY dashboard/requirements.txt .
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir -r requirements.txt gunicorn==22.*
@@ -31,9 +31,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 # Application code
-COPY --chown=app:app app.py           ./app.py
-COPY --chown=app:app gunicorn.conf.py ./gunicorn.conf.py
-COPY --chown=app:app templates/       ./templates/
+COPY --chown=app:app dashboard/app.py           ./app.py
+COPY --chown=app:app dashboard/gunicorn.conf.py ./gunicorn.conf.py
+COPY --chown=app:app dashboard/templates/       ./templates/
 
 # Embed the cluster template so /api/template returns pre-populated YAML.
 # The app resolves this relative to app.py's parent: ../example-cluster.yaml

@@ -229,20 +229,22 @@ def cluster_from_job(name: str) -> str | None:
 
 
 def _get_node_count(cluster: str) -> int:
-    """Return spec.node_count from clusters/<cluster>.yaml in the repo. Defaults to 1."""
-    data = _cached_get(
-        f"{API_BASE}/repos/{GITHUB_REPO}/contents/clusters/{cluster}.yaml",
-        ttl=300,
-    )
-    content_b64 = data.get("content", "")
-    if not content_b64:
-        return 1
-    try:
-        raw = base64.b64decode(content_b64).decode("utf-8")
-        parsed = yaml.safe_load(raw)
-        return max(1, int(parsed.get("spec", {}).get("node_count", 1)))
-    except Exception:
-        return 1
+    """Return spec.node_count from clusters/<cluster>.yaml (or destroyed/) in the repo. Defaults to 1."""
+    for path in (f"clusters/{cluster}.yaml", f"destroyed/{cluster}.yaml"):
+        data = _cached_get(
+            f"{API_BASE}/repos/{GITHUB_REPO}/contents/{path}",
+            ttl=300,
+        )
+        content_b64 = data.get("content", "")
+        if not content_b64:
+            continue
+        try:
+            raw = base64.b64decode(content_b64).decode("utf-8")
+            parsed = yaml.safe_load(raw)
+            return max(1, int(parsed.get("spec", {}).get("node_count", 1)))
+        except Exception:
+            continue
+    return 1
 
 
 # ── Main API route ─────────────────────────────────────────────────────────────

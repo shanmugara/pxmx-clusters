@@ -31,7 +31,7 @@ DESTROY_WORKFLOW = "cluster-destroy.yml"
 GITHUB_REF       = os.environ.get("GITHUB_REF", "main")  # branch to dispatch against
 
 # Path to the example cluster template (relative to this file's parent directory)
-_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "example-cluster.yaml")
+_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "example-cluster.yaml")
 
 def _load_template() -> str:
     try:
@@ -530,6 +530,12 @@ def api_create_cluster():
         return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
     except requests.RequestException as exc:
         return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/healthz")
+def healthz():
+    """Liveness / readiness probe — returns 200 when the process is up."""
+    return jsonify({"status": "ok"}), 200
 
 
 @app.route("/")

@@ -1,7 +1,7 @@
 module "vm" {
   # Pin to a specific tag for production stability, e.g. ?ref=v1.0.0
   source   = "git::https://github.com/shanmugara/pxmx-template.git//modules/vm?ref=main"
-  for_each = toset([for i in range(var.vm_qty) : trimsuffix("${var.vm_prefix}-${i + 1}.${var.dns_zone}", ".")])
+  for_each = toset([for i in range(var.vm_qty) : ("${var.vm_prefix}-0${i + 1}")])
 
   name        = each.key
   target_node = var.target_node

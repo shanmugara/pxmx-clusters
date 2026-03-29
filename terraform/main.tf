@@ -12,6 +12,7 @@ module "vm" {
   storage     = lookup(var.node_storage_map, var.target_node, "local-lvm")
   bridge      = var.bridge
   ci_password = var.ci_password
+  ci_sshkeys  = var.ci_sshkeys
 
   dns_zone = var.dns_zone
   dns_ttl  = var.dns_ttl

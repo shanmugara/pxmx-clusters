@@ -21,6 +21,12 @@ variable "ci_password" {
   sensitive   = true
 }
 
+variable "ci_sshkeys" {
+  description = "Cloud-init SSH public keys (newline-separated)"
+  type        = string
+  sensitive   = true
+}
+
 variable "dns_key_secret" {
   description = "TSIG key secret for DNS updates"
   type        = string

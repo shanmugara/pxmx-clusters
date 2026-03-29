@@ -4,7 +4,6 @@ metadata:
   name: test-01
   description: "Test cluster 01"
 spec:
-  # VM naming: nodes will be named <node_prefix>-1, <node_prefix>-2, etc.
   node_prefix: test-01
   node_count: 1
 

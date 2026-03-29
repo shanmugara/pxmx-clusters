@@ -91,6 +91,7 @@ jobs:
           TF_VAR_pm_password: ${{ secrets.PM_PASSWORD }}
           TF_VAR_ci_password: ${{ secrets.CI_PASSWORD }}
           TF_VAR_dns_key_secret: ${{ secrets.DNS_KEY_SECRET }}
+          TF_VAR_ci_sshkeys: ${{ secrets.CI_SSHKEYS }}
 
       - name: Upload plan as artifact (PR only)
         if: github.event_name == 'pull_request'

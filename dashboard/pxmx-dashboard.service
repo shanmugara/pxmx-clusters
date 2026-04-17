@@ -1,0 +1,51 @@
+[Unit]
+Description=pxmx Clusters Dashboard (Gunicorn/Flask)
+Documentation=https://github.com/shanmugara/pxmx-clusters
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+
+# Run as a dedicated, unprivileged service account
+User=pxmx
+Group=pxmx
+
+# Working directory must match where app.py and gunicorn.conf.py live
+WorkingDirectory=/opt/pxmx-dashboard
+
+# Secrets and tunable knobs — edit /etc/pxmx-dashboard/env before enabling
+EnvironmentFile=/etc/pxmx-dashboard/env
+
+# Start Gunicorn using the repo-provided config file
+ExecStart=/opt/pxmx-dashboard/venv/bin/gunicorn \
+    --config gunicorn.conf.py \
+    app:app
+
+# Allow Gunicorn to bind privileged ports via systemd socket activation
+# (not needed with default port 5001 — remove AmbientCapabilities if unused)
+# AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Restart policy: restart on crash, but not on clean exit (e.g. systemctl stop)
+Restart=on-failure
+RestartSec=5s
+
+# Give workers time to drain in-flight requests (matches gunicorn graceful_timeout)
+TimeoutStopSec=35s
+
+# Filesystem hardening ─────────────────────────────────────────────────────────
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pxmx-dashboard
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+# Log both stdout and stderr through the journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pxmx-dashboard
+
+[Install]
+WantedBy=multi-user.target

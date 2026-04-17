@@ -52,6 +52,74 @@ To avoid hammering the GitHub API, responses are cached in-process:
 
 ---
 
+## Production Installation (systemd)
+
+`install.sh` deploys the dashboard as a hardened systemd service running under a dedicated `pxmx` service account on any Linux host with Python 3 and `rsync`.
+
+### 1. Copy the dashboard source to the target host
+
+```bash
+rsync -av dashboard/ user@yourhost:/tmp/pxmx-dashboard-src/
+```
+
+### 2. Run the installer as root
+
+```bash
+ssh user@yourhost
+sudo bash /tmp/pxmx-dashboard-src/install.sh
+```
+
+The script:
+- Creates the `pxmx` system user (no login shell, no home dir)
+- Copies app files to `/opt/pxmx-dashboard`
+- Creates a Python virtualenv and installs all dependencies
+- Places an env file template at `/etc/pxmx-dashboard/env` (mode `640`, readable only by root and the `pxmx` group)
+- Installs and enables `pxmx-dashboard.service` via systemd
+
+### 3. Set secrets
+
+```bash
+sudo vi /etc/pxmx-dashboard/env
+```
+
+At minimum, set:
+
+```ini
+GITHUB_TOKEN=ghp_your_token_here
+GITHUB_REPO=your-username/pxmx-clusters
+```
+
+### 4. Start the service
+
+```bash
+sudo systemctl start pxmx-dashboard
+sudo systemctl status pxmx-dashboard
+```
+
+### 5. View logs
+
+```bash
+sudo journalctl -u pxmx-dashboard -f
+```
+
+### Re-deploying after code changes
+
+Re-run the installer — it is idempotent and will sync new files, upgrade dependencies, and restart the service:
+
+```bash
+sudo bash /tmp/pxmx-dashboard-src/install.sh
+```
+
+### Useful service commands
+
+```bash
+sudo systemctl stop    pxmx-dashboard
+sudo systemctl restart pxmx-dashboard
+sudo systemctl disable pxmx-dashboard   # prevent start at boot
+```
+
+---
+
 ## Running Locally for Testing
 
 ### 1. Install dependencies

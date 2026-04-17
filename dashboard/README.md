@@ -120,6 +120,194 @@ sudo systemctl disable pxmx-dashboard   # prevent start at boot
 
 ---
 
+## Kubernetes Installation
+
+Two options are provided: raw manifests or the Helm chart (recommended).
+
+### Option A — Helm chart (recommended)
+
+A Helm chart is available at [`deploy/helm/pxmx-dashboard/`](../deploy/helm/pxmx-dashboard/).
+
+#### Prerequisites
+
+- Helm 3.x (`brew install helm` or see [helm.sh](https://helm.sh/docs/intro/install/))
+- A Kubernetes cluster with `kubectl` access
+
+#### Install
+
+```bash
+helm install pxmx-dashboard deploy/helm/pxmx-dashboard \
+  --namespace pxmx-dashboard \
+  --create-namespace \
+  --set github.token=ghp_your_token_here \
+  --set github.repo=your-username/pxmx-clusters
+```
+
+#### Install with Ingress enabled
+
+```bash
+helm install pxmx-dashboard deploy/helm/pxmx-dashboard \
+  --namespace pxmx-dashboard \
+  --create-namespace \
+  --set github.token=ghp_your_token_here \
+  --set github.repo=your-username/pxmx-clusters \
+  --set ingress.enabled=true \
+  --set ingress.host=dashboard.example.com
+```
+
+#### Install using a values file (recommended for GitOps)
+
+```bash
+# Copy and edit the values file
+cp deploy/helm/pxmx-dashboard/values.yaml my-values.yaml
+# edit my-values.yaml — set github.repo, ingress.host, etc.
+# Supply the token separately to avoid committing it:
+helm install pxmx-dashboard deploy/helm/pxmx-dashboard \
+  --namespace pxmx-dashboard \
+  --create-namespace \
+  -f my-values.yaml \
+  --set github.token=ghp_your_token_here
+```
+
+#### Use an existing Secret (Sealed Secrets / External Secrets)
+
+If you manage secrets externally, create a secret with key `github-token` and point the chart at it:
+
+```bash
+# Create your secret by other means, then:
+helm install pxmx-dashboard deploy/helm/pxmx-dashboard \
+  --namespace pxmx-dashboard \
+  --create-namespace \
+  --set github.existingSecret=my-existing-secret \
+  --set github.repo=your-username/pxmx-clusters
+```
+
+#### Upgrade
+
+```bash
+helm upgrade pxmx-dashboard deploy/helm/pxmx-dashboard \
+  --namespace pxmx-dashboard \
+  --reuse-values \
+  --set image.tag=v0.0.2
+```
+
+#### Uninstall
+
+```bash
+helm uninstall pxmx-dashboard --namespace pxmx-dashboard
+```
+
+#### Key values
+
+| Value | Default | Description |
+|---|---|---|
+| `github.token` | `""` | GitHub PAT (required unless `github.existingSecret` is set) |
+| `github.existingSecret` | `""` | Use a pre-existing Secret instead of creating one |
+| `github.repo` | `shanmugara/pxmx-clusters` | Repository in `owner/repo` format |
+| `github.ref` | `main` | Branch for workflow dispatches |
+| `image.repository` | `shanmugara/pxmx-dashboard` | Container image |
+| `image.tag` | _(appVersion)_ | Image tag; defaults to Chart appVersion |
+| `ingress.enabled` | `false` | Enable the Ingress resource |
+| `ingress.host` | `dashboard.example.com` | Hostname for the Ingress |
+| `namespaceCreate` | `true` | Create the namespace; set `false` if it already exists |
+
+---
+
+### Option B — Raw manifests
+
+Manifests for a production Kubernetes deployment are in [`deploy/k8s/`](../deploy/k8s/).
+
+### Manifests overview
+
+| File | What it creates |
+|---|---|
+| `namespace.yaml` | `pxmx-dashboard` namespace |
+| `secret.yaml` | `dashboard-secret` — holds `GITHUB_TOKEN` |
+| `configmap.yaml` | `dashboard-config` — non-sensitive env vars (`GITHUB_REPO`, `PORT`, etc.) |
+| `deployment.yaml` | Single-replica Deployment running the Gunicorn container |
+| `service.yaml` | ClusterIP Service on port 80 → container port 5001 |
+| `ingress.yaml` | Optional Ingress (commented out; nginx + cert-manager example) |
+
+### 1. Build and push the image
+
+```bash
+# From the repo root (build context must be the root so example-cluster.yaml is available)
+docker build -f dashboard/Dockerfile -t ghcr.io/<owner>/pxmx-dashboard:latest .
+docker push ghcr.io/<owner>/pxmx-dashboard:latest
+```
+
+Update the `image:` field in `deploy/k8s/deployment.yaml` to match your registry path.
+
+### 2. Apply the namespace
+
+```bash
+kubectl apply -f deploy/k8s/namespace.yaml
+```
+
+### 3. Create the GitHub token secret
+
+Never commit a token in plain text. Create the secret directly with `kubectl`:
+
+```bash
+kubectl create secret generic dashboard-secret \
+  --namespace pxmx-dashboard \
+  --from-literal=github-token=ghp_your_token_here \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+### 4. Adjust the ConfigMap (optional)
+
+Edit `deploy/k8s/configmap.yaml` to set your `GITHUB_REPO` and any other tunables, then apply:
+
+```bash
+kubectl apply -f deploy/k8s/configmap.yaml
+```
+
+### 5. Deploy
+
+```bash
+kubectl apply -f deploy/k8s/deployment.yaml
+kubectl apply -f deploy/k8s/service.yaml
+```
+
+Or apply everything at once (the secret step above must already be done):
+
+```bash
+kubectl apply -f deploy/k8s/
+```
+
+Verify the pod comes up:
+
+```bash
+kubectl -n pxmx-dashboard get pods
+kubectl -n pxmx-dashboard logs -l app.kubernetes.io/name=pxmx-dashboard -f
+```
+
+### 6. Expose via Ingress (optional)
+
+Uncomment and edit `deploy/k8s/ingress.yaml`, replacing `dashboard.example.com` with your hostname, then:
+
+```bash
+kubectl apply -f deploy/k8s/ingress.yaml
+```
+
+Without an Ingress you can reach the dashboard via port-forward for testing:
+
+```bash
+kubectl -n pxmx-dashboard port-forward svc/pxmx-dashboard 8080:80
+# open http://localhost:8080
+```
+
+### Updating the deployment
+
+```bash
+# After rebuilding and pushing a new image:
+kubectl -n pxmx-dashboard rollout restart deployment/pxmx-dashboard
+kubectl -n pxmx-dashboard rollout status  deployment/pxmx-dashboard
+```
+
+---
+
 ## Running Locally for Testing
 
 ### 1. Install dependencies

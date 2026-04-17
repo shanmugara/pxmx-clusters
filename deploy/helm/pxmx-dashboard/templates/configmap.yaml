@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pxmx-dashboard.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pxmx-dashboard.labels" . | nindent 4 }}
+data:
+  GITHUB_REPO:      {{ .Values.github.repo | quote }}
+  GITHUB_REF:       {{ .Values.github.ref | quote }}
+  PORT:             {{ .Values.app.port | toString | quote }}
+  LOG_LEVEL:        {{ .Values.app.logLevel | quote }}
+  GUNICORN_WORKERS: {{ .Values.app.gunicornWorkers | toString | quote }}
+  GUNICORN_THREADS: {{ .Values.app.gunicornThreads | toString | quote }}

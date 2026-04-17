@@ -1,0 +1,108 @@
+# Default values for pxmx-dashboard.
+# Override with: helm install pxmx-dashboard ./pxmx-dashboard -f my-values.yaml
+# or:            helm install pxmx-dashboard ./pxmx-dashboard --set key=value
+
+replicaCount: 1
+
+image:
+  repository: shanmugara/pxmx-dashboard
+  # Overriding tag here takes precedence over Chart.yaml appVersion.
+  tag: ""
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Namespace ──────────────────────────────────────────────────────────────────
+# Set to false if the namespace already exists (e.g. managed by GitOps tooling).
+namespaceCreate: true
+
+# ── GitHub credentials ─────────────────────────────────────────────────────────
+github:
+  # Repository in "owner/repo" format.
+  repo: "shanmugara/pxmx-clusters"
+  # Branch to dispatch workflows against.
+  ref: "main"
+  # GitHub Personal Access Token.
+  # Supply via --set github.token=ghp_... or a separate sealed-secret / external-secret.
+  # Leave blank when using existingSecret.
+  token: ""
+  # Name of an existing Secret that already contains key "github-token".
+  # When set, the chart will not create its own Secret.
+  existingSecret: ""
+
+# ── Application tunables ───────────────────────────────────────────────────────
+app:
+  port: 5001
+  logLevel: "info"
+  gunicornWorkers: 1
+  gunicornThreads: 4
+
+# ── Service ────────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+
+# ── Ingress ────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  host: dashboard.example.com
+  tls:
+    enabled: true
+    secretName: pxmx-dashboard-tls
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "250m"
+    memory: "128Mi"
+
+# ── Pod-level security context ─────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# ── Container-level security context ──────────────────────────────────────────
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# ── Probes ────────────────────────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+# ── Extra pod annotations (e.g. for Prometheus scraping) ─────────────────────
+podAnnotations: {}
+
+# ── Node scheduling ────────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,34 @@
+Thank you for installing {{ .Chart.Name }} {{ .Chart.Version }}!
+
+Release name: {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACCESSING THE DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{- if .Values.ingress.enabled }}
+The dashboard is available at:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+No Ingress is enabled. Port-forward to access locally:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "pxmx-dashboard.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://localhost:8080
+
+To expose permanently, set ingress.enabled=true and configure ingress.host.
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USEFUL COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Check pod status
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+  # Stream logs
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+  # Upgrade
+  helm upgrade {{ .Release.Name }} ./pxmx-dashboard -n {{ .Release.Namespace }} --reuse-values
+
+  # Uninstall
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

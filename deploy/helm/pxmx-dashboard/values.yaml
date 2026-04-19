@@ -105,6 +105,13 @@ readinessProbe:
 # ── Extra pod annotations (e.g. for Prometheus scraping) ─────────────────────
 podAnnotations: {}
 
+# ── Service account ───────────────────────────────────────────────────────────
+# A dedicated ServiceAccount is always created and used by the Deployment.
+# Add annotations here for workload identity integrations
+# (e.g. AWS IRSA, GKE Workload Identity, Azure Workload Identity).
+serviceAccount:
+  annotations: {}
+
 # ── Node scheduling ────────────────────────────────────────────────────────────
 nodeSelector: {}
 tolerations: []

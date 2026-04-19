@@ -16,11 +16,20 @@ import os
 import re
 import time
 import base64
+import logging
 from datetime import datetime, timezone
 
 import requests
 import yaml
 from flask import Flask, jsonify, render_template, request
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+)
+log = logging.getLogger("pxmx-dashboard")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
@@ -122,8 +131,14 @@ def _gh_get(url: str, params: dict | None = None) -> dict:
     try:
         resp = requests.get(url, headers=_headers(), params=params or {}, timeout=10)
         resp.raise_for_status()
+        log.debug("github GET %s status=%s", url, resp.status_code)
         return resp.json()
-    except requests.RequestException:
+    except requests.HTTPError as exc:
+        log.error("github GET %s failed status=%s body=%s",
+                  url, exc.response.status_code, exc.response.text[:200])
+        return {}
+    except requests.RequestException as exc:
+        log.error("github GET %s failed error=%s", url, exc)
         return {}
 
 
@@ -437,14 +452,18 @@ def api_cleanup_destroyed():
             try:
                 resp = requests.delete(url, headers=_headers(), timeout=10)
                 if resp.status_code == 204:
+                    log.info("run deleted cluster=%s run_id=%s", cluster, run_id)
                     deleted.append(run_id)
                     # Evict any cache entries referencing this run
                     keys_to_drop = [k for k in _cache if str(run_id) in k]
                     for k in keys_to_drop:
                         _cache.pop(k, None)
                 else:
+                    log.error("run delete failed cluster=%s run_id=%s status=%s",
+                              cluster, run_id, resp.status_code)
                     errors.append(f"run {run_id}: HTTP {resp.status_code}")
             except requests.RequestException as exc:
+                log.error("run delete error cluster=%s run_id=%s error=%s", cluster, run_id, exc)
                 errors.append(f"run {run_id}: {exc}")
 
     # Also bust the runs-list cache so the next poll sees empty history
@@ -485,9 +504,13 @@ def api_destroy(cluster: str):
             timeout=10,
         )
         if resp.status_code == 204:
+            log.info("destroy dispatched cluster=%s ref=%s", cluster, GITHUB_REF)
             return jsonify({"ok": True})
+        log.error("destroy dispatch failed cluster=%s status=%s body=%s",
+                  cluster, resp.status_code, resp.text[:200])
         return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
     except requests.RequestException as exc:
+        log.error("destroy dispatch error cluster=%s error=%s", cluster, exc)
         return jsonify({"error": str(exc)}), 502
 
 
@@ -558,9 +581,14 @@ def api_create_cluster():
             timeout=15,
         )
         if resp.status_code in (200, 201):
+            log.info("cluster created cluster=%s path=%s ref=%s",
+                     cluster_name, file_path, GITHUB_REF)
             return jsonify({"ok": True, "cluster": cluster_name, "path": file_path})
+        log.error("cluster create failed cluster=%s status=%s body=%s",
+                  cluster_name, resp.status_code, resp.text[:200])
         return jsonify({"error": f"GitHub API returned {resp.status_code}: {resp.text}"}), 502
     except requests.RequestException as exc:
+        log.error("cluster create error cluster=%s error=%s", cluster_name, exc)
         return jsonify({"error": str(exc)}), 502
 
 

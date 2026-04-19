@@ -58,6 +58,30 @@ ingress:
     enabled: true
     secretName: pxmx-dashboard-tls
 
+# ── Istio Gateway, VirtualService, ServiceEntry + DestinationRule ─────────────
+# Enable when the cluster uses Istio for ingress and egress routing.
+# ingress.enabled and istio.enabled are mutually exclusive.
+istio:
+  enabled: false
+  # Hostname the Gateway and VirtualService will match.
+  host: dashboard.example.com
+  # URI path prefix published by Istio (e.g. /pxmx).
+  # The prefix is stripped before forwarding to Flask via DispatcherMiddleware.
+  # Also set app.basePath to the same value.
+  pathPrefix: "/"
+  gateway:
+    # true  → create a Gateway resource owned by this chart.
+    # false → reference an existing Gateway via existingName.
+    create: true
+    existingName: ""
+    existingNamespace: ""
+    selector:
+      istio: ingressgateway
+    tls:
+      enabled: true
+      mode: SIMPLE
+      credentialName: pxmx-dashboard-tls
+
 # ── Resources ──────────────────────────────────────────────────────────────────
 resources:
   requests:

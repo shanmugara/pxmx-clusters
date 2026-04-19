@@ -1,0 +1,38 @@
+{{- if .Values.istio.enabled }}
+# ServiceEntry registers api.github.com in Istio's service registry so Envoy
+# knows how to handle outbound calls from the dashboard pod.
+#
+# DestinationRule sets tls.mode=SIMPLE, which tells Envoy to originate TLS
+# to the external host rather than intercepting the Python requests TLS
+# handshake — this prevents the SSLEOFError caused by double-TLS termination.
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: {{ include "pxmx-dashboard.fullname" . }}-github-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pxmx-dashboard.labels" . | nindent 4 }}
+spec:
+  hosts:
+    - api.github.com
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "pxmx-dashboard.fullname" . }}-github-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pxmx-dashboard.labels" . | nindent 4 }}
+spec:
+  host: api.github.com
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+{{- end }}

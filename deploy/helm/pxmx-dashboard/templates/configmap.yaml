@@ -12,3 +12,6 @@ data:
   LOG_LEVEL:        {{ .Values.app.logLevel | quote }}
   GUNICORN_WORKERS: {{ .Values.app.gunicornWorkers | toString | quote }}
   GUNICORN_THREADS: {{ .Values.app.gunicornThreads | toString | quote }}
+  {{- if .Values.app.basePath }}
+  BASE_PATH:        {{ .Values.app.basePath | quote }}
+  {{- end }}

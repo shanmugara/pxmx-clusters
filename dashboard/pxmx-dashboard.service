@@ -20,7 +20,7 @@ EnvironmentFile=/etc/pxmx-dashboard/env
 # Start Gunicorn using the repo-provided config file
 ExecStart=/opt/pxmx-dashboard/venv/bin/gunicorn \
     --config gunicorn.conf.py \
-    app:app
+    app:application
 
 # Allow Gunicorn to bind privileged ports via systemd socket activation
 # (not needed with default port 5001 — remove AmbientCapabilities if unused)

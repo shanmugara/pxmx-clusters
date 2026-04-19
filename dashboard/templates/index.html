@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>pxmx-clusters · Dashboard</title>
   <meta name="gh-repo" content="{{ repo }}">
+  <meta name="base-path" content="{{ base_path }}">
   <style>
     /* ── Design tokens ── */
     :root {
@@ -636,6 +637,8 @@
 
     const POLL_MS      = 10_000;   // refresh every 10 s
     const REPO_NAME    = document.querySelector('meta[name="gh-repo"]').content;
+    // BASE_JS is the URL path prefix (e.g. "/pxmx") or "" when served at root.
+    const BASE_JS      = document.querySelector('meta[name="base-path"]').content;
 
     const $grid        = document.getElementById('grid');
     const $error       = document.getElementById('error-banner');
@@ -785,7 +788,7 @@
       $statusText.textContent = 'Refreshing…';
 
       try {
-        const resp = await fetch('/api/clusters');
+        const resp = await fetch(`${BASE_JS}/api/clusters`);
         const data = await resp.json();
 
         if (data.error) {
@@ -874,7 +877,7 @@
       $modalConfirm.textContent     = 'Triggering\u2026';
 
       try {
-        const resp = await fetch(`/api/destroy/${encodeURIComponent(cluster)}`, {
+        const resp = await fetch(`${BASE_JS}/api/destroy/${encodeURIComponent(cluster)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -909,7 +912,7 @@
     let _templateText  = '';
 
     // Load template on startup
-    fetch('/api/template')
+    fetch(`${BASE_JS}/api/template`)
       .then(r => r.text())
       .then(t => {
         _templateText = t;
@@ -962,7 +965,7 @@
       $btnApply.textContent  = 'Applying\u2026';
 
       try {
-        const resp = await fetch('/api/create-cluster', {
+        const resp = await fetch(`${BASE_JS}/api/create-cluster`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ manifest }),
@@ -1001,7 +1004,7 @@
       $btnCleanup.disabled     = true;
 
       try {
-        const resp = await fetch('/api/cleanup-destroyed', { method: 'POST' });
+        const resp = await fetch(`${BASE_JS}/api/cleanup-destroyed`, { method: 'POST' });
         const data = await resp.json();
 
         if (data.ok) {

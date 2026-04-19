@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: shanmugara/pxmx-dashboard
+  repository: ghcr.io/shanmugara/pxmx-dashboard
   # Overriding tag here takes precedence over Chart.yaml appVersion.
   tag: ""
   pullPolicy: Always
@@ -37,6 +37,9 @@ app:
   logLevel: "info"
   gunicornWorkers: 1
   gunicornThreads: 4
+  # URL path prefix for sub-path deployments (e.g. behind Istio at /pxmx).
+  # Must start with / and have no trailing slash.  Leave empty to serve at /.
+  basePath: ""
 
 # ── Service ────────────────────────────────────────────────────────────────────
 service:

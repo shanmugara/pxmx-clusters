@@ -48,4 +48,4 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/healthz')"
 
-ENTRYPOINT ["gunicorn", "--config", "gunicorn.conf.py", "app:app"]
+ENTRYPOINT ["gunicorn", "--config", "gunicorn.conf.py", "app:application"]

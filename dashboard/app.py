@@ -9,6 +9,7 @@ Required environment variables:
 
 Optional:
   PORT          - HTTP port to listen on (default: 5001)
+  BASE_PATH     - URL path prefix, e.g. /pxmx  (default: empty, serve at /)
 """
 
 import os
@@ -25,6 +26,10 @@ from flask import Flask, jsonify, render_template, request
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO  = os.environ.get("GITHUB_REPO", "")   # "owner/repo"
 API_BASE     = "https://api.github.com"
+
+# Optional URL path prefix (e.g. "/pxmx").  Strip trailing slash so it is
+# always in canonical form: either "" or "/something".
+BASE_PATH = os.environ.get("BASE_PATH", "").rstrip("/")
 
 APPLY_WORKFLOW   = "cluster-apply.yml"
 DESTROY_WORKFLOW = "cluster-destroy.yml"
@@ -567,7 +572,24 @@ def healthz():
 
 @app.route("/")
 def index():
-    return render_template("index.html", repo=GITHUB_REPO)
+    return render_template("index.html", repo=GITHUB_REPO, base_path=BASE_PATH)
+
+
+# ── WSGI application ───────────────────────────────────────────────────────────
+# When BASE_PATH is set (e.g. "/pxmx"), mount the Flask app under that prefix
+# using Werkzeug's DispatcherMiddleware.  Gunicorn should target app:application.
+# When BASE_PATH is empty the wrapper is skipped and 'application' is the bare
+# Flask instance — behaviour is identical to before.
+if BASE_PATH:
+    from werkzeug.middleware.dispatcher import DispatcherMiddleware
+    from werkzeug.wrappers import Response as _Response
+    app.config["APPLICATION_ROOT"] = BASE_PATH
+    application = DispatcherMiddleware(
+        _Response("Not Found", status=404),
+        {BASE_PATH: app},
+    )
+else:
+    application = app  # type: ignore[assignment]
 
 
 if __name__ == "__main__":

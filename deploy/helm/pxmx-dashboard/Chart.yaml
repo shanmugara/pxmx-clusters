@@ -4,8 +4,8 @@ description: >
   Lightweight Flask/Gunicorn dashboard that proxies the GitHub Actions API
   to display real-time Terraform run progress for pxmx clusters.
 type: application
-version: 0.0.3
-appVersion: "0.0.3"
+version: 0.0.4
+appVersion: "0.0.4"
 keywords:
   - pxmx
   - proxmox

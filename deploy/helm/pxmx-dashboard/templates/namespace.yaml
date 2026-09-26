@@ -1,0 +1,12 @@
+{{- if .Values.namespaceCreate }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  annotations:
+    # Keep the namespace when the chart is uninstalled
+    "helm.sh/resource-policy": keep
+  labels:
+    csi-webhook: enabled
+    {{- include "pxmx-dashboard.labels" . | nindent 4 }}
+{{- end }}

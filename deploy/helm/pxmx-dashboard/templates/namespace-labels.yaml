@@ -1,0 +1,24 @@
+{{- if not .Values.namespaceCreate }}
+{{- /*
+  When the namespace is pre-existing (namespaceCreate=false), use lookup to
+  check whether it already has the csi-webhook label.  If the label is absent,
+  render a minimal Namespace patch so Helm's strategic-merge apply adds it
+  without touching any other labels or annotations on the namespace.
+
+  The helm.sh/resource-policy: keep annotation prevents helm uninstall from
+  deleting a namespace the chart did not originally create.
+*/}}
+{{- $ns := lookup "v1" "Namespace" "" .Release.Namespace }}
+{{- $existingLabels := dict }}
+{{- if $ns }}{{- $existingLabels = ($ns.metadata.labels | default dict) }}{{- end }}
+{{- if not (index $existingLabels "csi-webhook") }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    csi-webhook: enabled
+{{- end }}
+{{- end }}

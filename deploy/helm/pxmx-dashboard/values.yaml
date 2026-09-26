@@ -39,7 +39,7 @@ app:
   gunicornThreads: 4
   # URL path prefix for sub-path deployments (e.g. behind Istio at /pxmx).
   # Must start with / and have no trailing slash.  Leave empty to serve at /.
-  basePath: ""
+  basePath: "/pxmx"
 
 # ── Service ────────────────────────────────────────────────────────────────────
 service:
@@ -110,7 +110,7 @@ containerSecurityContext:
 # ── Probes ────────────────────────────────────────────────────────────────────
 livenessProbe:
   httpGet:
-    path: /healthz
+    path: /pxmx/healthz
     port: http
   initialDelaySeconds: 10
   periodSeconds: 30
@@ -119,7 +119,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /pxmx/healthz
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
@@ -134,7 +134,8 @@ podAnnotations: {}
 # Add annotations here for workload identity integrations
 # (e.g. AWS IRSA, GKE Workload Identity, Azure Workload Identity).
 serviceAccount:
-  annotations: {}
+  annotations:
+    omegahome.net/managed-spire: "true"
 
 # ── Node scheduling ────────────────────────────────────────────────────────────
 nodeSelector: {}
